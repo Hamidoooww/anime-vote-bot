@@ -39,12 +39,12 @@ def register_user_handlers(
             f"سوال ۱:\n{questions[0].text}"
         )
 
-    # Fixed decorator – no filter on commands, we'll skip them manually
+    # ✅ دکوراتور اصلاح شده: فقط متن و پی‌وی، بدون فیلتر دستورات
     @app.on_message(filters.text & filters.private)
     async def handle_text(client: Client, message: Message):
         user_id = message.from_user.id
 
-        # Ignore any command (starts with '/')
+        # ❗ اگر پیام با / شروع شد، نادیده بگیر (دستور است)
         if message.text.startswith('/'):
             return
 
