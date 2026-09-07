@@ -19,7 +19,7 @@ class TelegramQuestionRepository:
 
     async def get_all(self) -> List[Message]:
         messages = []
-        async for msg in self._client.get_chat_history(self._channel_id, limit=0):
+        async for msg in self._client.get_chat_history(self._channel_id, limit=100):
             if msg.text:
                 messages.append(msg)
         messages.reverse()

@@ -72,6 +72,20 @@ def register_user_handlers(
                 session.state = "awaiting_final"
                 session_manager.update(user_id, session)
 
+        elif session.state == "awaiting_final":
+            # کاربر بعد از دیدن پیش‌نمایش مستقیماً شماره سوال را فرستاده
+            try:
+                q_num = int(text) - 1
+                if 0 <= q_num < total:
+                    session.edit_index = q_num
+                    session.state = "edit_answer"
+                    await message.reply_text(f"پاسخ جدید برای سوال {q_num + 1} را بفرستید:")
+                    session_manager.update(user_id, session)
+                else:
+                    await message.reply_text("شماره نامعتبر است.")
+            except ValueError:
+                await message.reply_text("برای ویرایش، شماره سوال را بفرستید یا از دکمه استفاده کنید.")
+
         elif session.state == "edit_number":
             try:
                 q_num = int(text) - 1
