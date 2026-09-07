@@ -39,9 +39,15 @@ def register_user_handlers(
             f"سوال ۱:\n{questions[0].text}"
         )
 
-    @app.on_message(filters.text & filters.private & ~filters.command())
+    # Fixed decorator – no filter on commands, we'll skip them manually
+    @app.on_message(filters.text & filters.private)
     async def handle_text(client: Client, message: Message):
         user_id = message.from_user.id
+
+        # Ignore any command (starts with '/')
+        if message.text.startswith('/'):
+            return
+
         if user_id == Config.ADMIN_ID:
             return
 
@@ -73,7 +79,6 @@ def register_user_handlers(
                 session_manager.update(user_id, session)
 
         elif session.state == "awaiting_final":
-            # کاربر بعد از دیدن پیش‌نمایش مستقیماً شماره سوال را فرستاده
             try:
                 q_num = int(text) - 1
                 if 0 <= q_num < total:
