@@ -39,7 +39,7 @@ def register_user_handlers(
             f"سوال ۱:\n{questions[0].text}"
         )
 
-    @app.on_message(filters.text & filters.private & ~filters.command)
+    @app.on_message(filters.text & filters.private & ~filters.command())
     async def handle_text(client: Client, message: Message):
         user_id = message.from_user.id
         if user_id == Config.ADMIN_ID:
