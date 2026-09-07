@@ -3,10 +3,18 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
+def _required(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        raise RuntimeError(f"Missing required environment variable: {name}")
+    return value
+
+
 class Config:
-    API_ID = int(os.getenv("API_ID", "0"))
-    API_HASH = os.getenv("API_HASH", "")
-    BOT_TOKEN = os.getenv("BOT_TOKEN", "")
-    ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
-    QUESTIONS_CHANNEL_ID = int(os.getenv("QUESTIONS_CHANNEL_ID", "0"))
-    ANSWERS_CHANNEL_ID = int(os.getenv("ANSWERS_CHANNEL_ID", "0"))
+    API_ID = int(_required("API_ID"))
+    API_HASH = _required("API_HASH")
+    BOT_TOKEN = _required("BOT_TOKEN")
+    ADMIN_ID = int(_required("ADMIN_ID"))
+    QUESTIONS_CHANNEL_ID = int(_required("QUESTIONS_CHANNEL_ID"))
+    ANSWERS_CHANNEL_ID = int(_required("ANSWERS_CHANNEL_ID"))

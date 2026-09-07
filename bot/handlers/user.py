@@ -5,6 +5,7 @@ from bot.services.question_service import QuestionRepository
 from bot.services.session_manager import SessionManager
 from bot.utils.telegram import build_preview
 
+
 def register_user_handlers(
     app: Client,
     question_repo: QuestionRepository,
@@ -12,14 +13,19 @@ def register_user_handlers(
 ):
     @app.on_message(filters.command("start") & filters.private)
     async def start_command(client: Client, message: Message):
+        if not message.from_user:
+            return
+
         user_id = message.from_user.id
+
         if user_id == Config.ADMIN_ID:
             await message.reply_text(
-                "🔐 **پنل ادمین**\n\n"
+                "🔐 <b>پنل ادمین</b>\n\n"
                 "دستورات:\n"
-                "/add_question <متن سوال>\n"
-                "/remove_question <شماره>\n"
-                "/list_questions"
+                "/add_question &lt;متن سوال&gt;\n"
+                "/remove_question &lt;شماره&gt;\n"
+                "/list_questions",
+                parse_mode="html",
             )
             return
 
@@ -32,20 +38,24 @@ def register_user_handlers(
         session.current_index = 0
         session.answers = []
         session.state = "answering"
-        session_manager.update(user_id, session)
+        session.edit_index = None
 
         await message.reply_text(
             f"سلام! لطفاً به {len(questions)} سوال پاسخ دهید.\n\n"
-            f"سوال ۱:\n{questions[0].text}"
+            f"سوال ۱:\n{questions[0].text or ''}"
         )
 
-    # ✅ دکوراتور اصلاح شده: فقط متن و پی‌وی، بدون فیلتر دستورات
+    # IMPORTANT: filters.command() requires command names.
+    # This is a general text handler, so commands are ignored explicitly below.
     @app.on_message(filters.text & filters.private)
     async def handle_text(client: Client, message: Message):
+        if not message.from_user or not message.text:
+            return
+
         user_id = message.from_user.id
 
-        # ❗ اگر پیام با / شروع شد، نادیده بگیر (دستور است)
-        if message.text.startswith('/'):
+        # Commands belong to command handlers.
+        if message.text.startswith("/"):
             return
 
         if user_id == Config.ADMIN_ID:
@@ -56,15 +66,27 @@ def register_user_handlers(
             return
 
         text = message.text.strip()
+        if not text:
+            await message.reply_text("لطفاً یک پاسخ وارد کنید.")
+            return
+
         questions = await question_repo.get_all()
         total = len(questions)
+
+        # Questions may have been removed while a user was answering.
+        if total == 0 or session.current_index >= total:
+            session_manager.delete(user_id)
+            await message.reply_text(
+                "سوالات تغییر کرده‌اند و جلسه قبلی دیگر معتبر نیست. لطفاً /start را بزنید."
+            )
+            return
 
         if session.state == "answering":
             session.answers.append(text)
             session.current_index += 1
 
             if session.current_index < total:
-                next_q = questions[session.current_index].text
+                next_q = questions[session.current_index].text or ""
                 await message.reply_text(
                     f"سوال {session.current_index + 1}:\n{next_q}"
                 )
@@ -74,45 +96,50 @@ def register_user_handlers(
                     [InlineKeyboardButton("✅ تأیید نهایی", callback_data="confirm_final")],
                     [InlineKeyboardButton("✏️ ویرایش پاسخ", callback_data="edit_answer")]
                 ])
-                await message.reply_text(preview, reply_markup=keyboard)
                 session.state = "awaiting_final"
                 session_manager.update(user_id, session)
+                await message.reply_text(
+                    preview, reply_markup=keyboard, parse_mode="html"
+                )
 
-        elif session.state == "awaiting_final":
+        elif session.state in ("awaiting_final", "edit_number"):
             try:
                 q_num = int(text) - 1
-                if 0 <= q_num < total:
-                    session.edit_index = q_num
-                    session.state = "edit_answer"
-                    await message.reply_text(f"پاسخ جدید برای سوال {q_num + 1} را بفرستید:")
-                    session_manager.update(user_id, session)
-                else:
-                    await message.reply_text("شماره نامعتبر است.")
             except ValueError:
-                await message.reply_text("برای ویرایش، شماره سوال را بفرستید یا از دکمه استفاده کنید.")
+                await message.reply_text("لطفاً شماره سوال را به صورت عدد بفرستید.")
+                return
 
-        elif session.state == "edit_number":
-            try:
-                q_num = int(text) - 1
-                if 0 <= q_num < total:
-                    session.edit_index = q_num
-                    session.state = "edit_answer"
-                    await message.reply_text(f"پاسخ جدید برای سوال {q_num + 1} را بفرستید:")
-                    session_manager.update(user_id, session)
-                else:
-                    await message.reply_text("شماره نامعتبر است.")
-            except ValueError:
-                await message.reply_text("لطفاً یک عدد بفرستید.")
+            if 0 <= q_num < len(session.answers):
+                session.edit_index = q_num
+                session.state = "edit_answer"
+                session_manager.update(user_id, session)
+                await message.reply_text(
+                    f"پاسخ جدید برای سوال {q_num + 1} را بفرستید:"
+                )
+            else:
+                await message.reply_text("شماره سوال نامعتبر است.")
 
         elif session.state == "edit_answer":
             edit_idx = session.edit_index
+
+            if edit_idx is None or not (0 <= edit_idx < len(session.answers)):
+                session_manager.delete(user_id)
+                await message.reply_text(
+                    "جلسه ویرایش نامعتبر شد. لطفاً /start را بزنید."
+                )
+                return
+
             session.answers[edit_idx] = text
-            session.state = "answering"
+            session.edit_index = None
+            session.state = "awaiting_final"
+
             preview = build_preview(session.answers)
             keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("✅ تأیید نهایی", callback_data="confirm_final")],
                 [InlineKeyboardButton("✏️ ویرایش پاسخ", callback_data="edit_answer")]
             ])
-            await message.reply_text(preview, reply_markup=keyboard)
-            session.state = "awaiting_final"
             session_manager.update(user_id, session)
+
+            await message.reply_text(
+                preview, reply_markup=keyboard, parse_mode="html"
+            )
