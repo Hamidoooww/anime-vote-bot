@@ -9,8 +9,8 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import Message
 
 # ====================== تنظیمات ======================
-TOKEN = os.getenv("BOT_TOKEN")                # توکن بات خود را در متغیر محیطی قرار دهید
-CHANNEL_ID = os.getenv("CHANNEL_ID")          # شناسه کانال (مثلاً -1001234567890 یا @username)
+TOKEN = os.getenv("BOT_TOKEN")
+CHANNEL_ID = os.getenv("CHANNEL_ID")
 
 if not TOKEN or not CHANNEL_ID:
     raise ValueError("لطفاً BOT_TOKEN و CHANNEL_ID را در متغیرهای محیطی تنظیم کنید.")
@@ -55,11 +55,11 @@ ALL_QUESTIONS = INTRO_QUESTIONS + MAIN_QUESTIONS
 
 # ====================== تعریف State ======================
 class Form(StatesGroup):
-    answering = State()   # یک state واحد برای تمام سوالات
+    answering = State()
 
 # ====================== توابع کمکی ======================
 async def ask_question(message: Message, state: FSMContext, index: int):
-    """پرسیدن سوال شماره index و تنظیم state"""
+    """پرسیدن سوال شماره index و پایان مصاحبه در صورت اتمام"""
     data = await state.get_data()
     if index >= len(ALL_QUESTIONS):
         # پایان مصاحبه – ارسال پاسخ‌ها به کانال
@@ -69,7 +69,6 @@ async def ask_question(message: Message, state: FSMContext, index: int):
         for i, q in enumerate(ALL_QUESTIONS):
             ans = answers.get(i, "❌ پاسخی داده نشده")
             text += f"🔹 {q}\n🔸 پاسخ: {ans}\n\n"
-        # ارسال به کانال
         try:
             await message.bot.send_message(chat_id=CHANNEL_ID, text=text)
             await message.answer("✅ مصاحبه به پایان رسید. پاسخ‌های شما با موفقیت ثبت شد. متشکریم!")
@@ -84,43 +83,37 @@ async def ask_question(message: Message, state: FSMContext, index: int):
     await state.set_state(Form.answering)
     await state.update_data(current_index=index)
 
-# ====================== هندلرها ======================
-# شروع مصاحبه
-@dp.message(Command("start"))
-async def start_command(message: Message, state: FSMContext):
-    await state.clear()
-    await state.update_data(answers={})
-    await ask_question(message, state, 0)
-
-# دریافت پاسخ کاربر
-@dp.message(StateFilter(Form.answering))
-async def answer_handler(message: Message, state: FSMContext):
-    data = await state.get_data()
-    index = data.get("current_index", 0)
-    answers = data.get("answers", {})
-    answers[index] = message.text
-    await state.update_data(answers=answers)
-    await ask_question(message, state, index + 1)
-
-# لغو مصاحبه
-@dp.message(Command("cancel"))
-async def cancel_command(message: Message, state: FSMContext):
-    await state.clear()
-    await message.answer("❌ مصاحبه لغو شد. برای شروع مجدد /start را بزنید.")
-
-# ====================== راه‌اندازی ======================
+# ====================== تابع اصلی ======================
 async def main():
     storage = MemoryStorage()
     bot = Bot(token=TOKEN)
     dp = Dispatcher(storage=storage)
 
-    # ثبت هندلرها
-    dp.message.register(start_command, Command("start"))
-    dp.message.register(cancel_command, Command("cancel"))
-    dp.message.register(answer_handler, StateFilter(Form.answering))
+    # ---------- هندلرها ----------
+    @dp.message(Command("start"))
+    async def start_command(message: Message, state: FSMContext):
+        await state.clear()
+        await state.update_data(answers={})
+        await ask_question(message, state, 0)
 
+    @dp.message(Command("cancel"))
+    async def cancel_command(message: Message, state: FSMContext):
+        await state.clear()
+        await message.answer("❌ مصاحبه لغو شد. برای شروع مجدد /start را بزنید.")
+
+    @dp.message(StateFilter(Form.answering))
+    async def answer_handler(message: Message, state: FSMContext):
+        data = await state.get_data()
+        index = data.get("current_index", 0)
+        answers = data.get("answers", {})
+        answers[index] = message.text
+        await state.update_data(answers=answers)
+        await ask_question(message, state, index + 1)
+
+    # ---------- اجرا ----------
     logging.basicConfig(level=logging.INFO)
-    await dp.start_polling(bot)
+    # drop_pending_updates=True باعث می‌شود پیام‌های قدیمی هنگام راه‌اندازی مجدد نادیده گرفته شوند
+    await dp.start_polling(bot, drop_pending_updates=True)
 
 if __name__ == "__main__":
     asyncio.run(main())
