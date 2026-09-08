@@ -2,13 +2,13 @@ name: Run Telegram Bot
 
 on:
   schedule:
-    # هر ۶ ساعت یکبار در دقیقه‌ی ۰ اجرا شود
-    - cron: '0 */6 * * *'
-  workflow_dispatch:   # امکان اجرای دستی
+    - cron: '0 */6 * * *'   # هر ۶ ساعت در دقیقه ۰
+  workflow_dispatch:         # قابلیت اجرای دستی
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -23,9 +23,8 @@ jobs:
           pip install --upgrade pip
           pip install aiogram
 
-      - name: Run the bot
+      - name: Run bot
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
-        run: |
-          python bot.py
+        run: python bot.py

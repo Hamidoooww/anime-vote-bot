@@ -8,15 +8,14 @@ from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import Message
 
-dp = Dispatcher
 # ====================== تنظیمات ======================
 TOKEN = os.getenv("BOT_TOKEN")
-CHANNEL_ID = os.getenv("CHANNEL_ID")
+USER_ID = 8741380751  # شناسه کاربر مقصد
 
-if not TOKEN or not CHANNEL_ID:
-    raise ValueError("لطفاً BOT_TOKEN و CHANNEL_ID را در متغیرهای محیطی تنظیم کنید.")
+if not TOKEN:
+    raise ValueError("لطفاً BOT_TOKEN را در متغیرهای محیطی تنظیم کنید.")
 
-# ====================== لیست سوالات ======================
+# ====================== لیست سوالات (بدون تغییر) ======================
 INTRO_QUESTIONS = [
     "لطفا ابتدا سن، تحصیلات و شغل خود را ذکر کنید",
     "اگر دوست داشتید اسم واقعی خودتان را بگویید یا اسم مستعار",
@@ -60,10 +59,9 @@ class Form(StatesGroup):
 
 # ====================== توابع کمکی ======================
 async def ask_question(message: Message, state: FSMContext, index: int):
-    """پرسیدن سوال شماره index و پایان مصاحبه در صورت اتمام"""
     data = await state.get_data()
     if index >= len(ALL_QUESTIONS):
-        # پایان مصاحبه – ارسال پاسخ‌ها به کانال
+        # پایان مصاحبه
         answers = data.get("answers", {})
         user_id = message.from_user.id
         text = f"🆔 User ID: {user_id}\n\n"
@@ -71,16 +69,17 @@ async def ask_question(message: Message, state: FSMContext, index: int):
             ans = answers.get(i, "❌ پاسخی داده نشده")
             text += f"🔹 {q}\n🔸 پاسخ: {ans}\n\n"
         try:
-            await message.bot.send_message(chat_id=CHANNEL_ID, text=text)
+            await message.bot.send_message(chat_id=USER_ID, text=text)
             await message.answer("✅ مصاحبه به پایان رسید. پاسخ‌های شما با موفقیت ثبت شد. متشکریم!")
         except Exception as e:
-            logging.error(f"خطا در ارسال به کانال: {e}")
-            await message.answer("❌ خطا در ارسال به کانال. لطفاً بعداً تلاش کنید.")
+            logging.error(f"خطا در ارسال به کاربر {USER_ID}: {e}")
+            await message.answer("❌ متأسفانه ارسال پاسخ‌ها با مشکل مواجه شد. لطفاً بعداً تلاش کنید.")
         await state.clear()
         return
 
     q = ALL_QUESTIONS[index]
-    await message.answer(f"📌 سوال {index+1} از {len(ALL_QUESTIONS)}:\n\n{q}")
+    # نمایش شماره سوال برای کاربر
+    await message.answer(q)
     await state.set_state(Form.answering)
     await state.update_data(current_index=index)
 
@@ -90,7 +89,6 @@ async def main():
     bot = Bot(token=TOKEN)
     dp = Dispatcher(storage=storage)
 
-    # ---------- هندلرها ----------
     @dp.message(Command("start"))
     async def start_command(message: Message, state: FSMContext):
         await state.clear()
@@ -111,9 +109,7 @@ async def main():
         await state.update_data(answers=answers)
         await ask_question(message, state, index + 1)
 
-    # ---------- اجرا ----------
     logging.basicConfig(level=logging.INFO)
-    # drop_pending_updates=True باعث می‌شود پیام‌های قدیمی هنگام راه‌اندازی مجدد نادیده گرفته شوند
     await dp.start_polling(bot, drop_pending_updates=True)
 
 if __name__ == "__main__":
